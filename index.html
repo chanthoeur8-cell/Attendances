@@ -51,84 +51,100 @@
 <script>
 const BOT_TOKEN = "8242266919:AAGE6uMJ_-UvM-3KBZkJVFhJyTLvcTVW5tQ";
 const CHAT_ID = "1346632543";
-// កំណត់ម៉ោងចូល និង ចេញផ្លូវការ
-const OFFICIAL_IN = "07:15";
-const OFFICIAL_OUT = "17:15";
+const IN_LIMIT = "07:15";
+const OUT_LIMIT = "17:15";
 
-async function processAttendance() {
+function getTime() {
+    const now = new Date();
+    const time = now.toTimeString().slice(0, 5);
+    const date = now.toLocaleDateString("en-GB");
+    return { time, date };
+}
+
+function updateDisplay() {
+    const { time, date } = getTime();
+    document.getElementById("timeDisplay").innerText = `🕒 ម៉ោង៖ ${time} | 📅 ថ្ងៃទី៖ ${date}`;
+    checkTimeStatus();
+}
+setInterval(updateDisplay, 1000);
+updateDisplay();
+
+function checkTimeStatus() {
+    const { time } = getTime();
+    const type = document.getElementById("type").value;
+    const field = document.getElementById("reasonField");
+    const label = document.getElementById("reasonLabel");
+
+    const isLate = (type === "checkin" && time > IN_LIMIT);
+    const isEarly = (type === "checkout" && time < OUT_LIMIT);
+
+    if (isLate) {
+        field.style.display = "block";
+        label.innerText = `⚠️ អ្នកមកយឺត (លើសម៉ោង ${IN_LIMIT})`;
+    } else if (isEarly) {
+        field.style.display = "block";
+        label.innerText = `⚠️ អ្នកចេញមុន (មុនម៉ោង ${OUT_LIMIT})`;
+    } else {
+        field.style.display = "none";
+    }
+}
+
+function calcDiff(t1, t2) {
+    const [h1, m1] = t1.split(':').map(Number);
+    const [h2, m2] = t2.split(':').map(Number);
+    return (h1 * 60 + m1) - (h2 * 60 + m2);
+}
+
+async function handleAttendance() {
     const name = document.getElementById("name").value.trim();
     const role = document.getElementById("role").value.trim();
-    const type = document.getElementById("type").value; // 'checkin' ឬ 'checkout'
+    const type = document.getElementById("type").value;
     const reason = document.getElementById("reason").value.trim();
-    const {time, date} = getNow();
+    const { time, date } = getTime();
 
-    if(!name || !role){
-        alert("សូមបំពេញឈ្មោះ និង តួនាទី");
+    if (!name || !role) {
+        alert("សូមបំពេញឈ្មោះ និងតួនាទី!");
         return;
     }
 
-    let statusLabel = "";
-    let extraDetail = "";
-
-    // --- ផ្នែកពិនិត្យ Check-in ---
+    // ឆែកនាទីយឺត
+    let extraNote = "";
     if (type === "checkin") {
-        statusLabel = "✅ ចូលធ្វើការ (Check-In)";
-        const lateMins = getDiffMinutes(time, OFFICIAL_IN, true);
-        if (lateMins > 0) {
-            extraDetail = `\n⏰ <b>យឺត៖</b> ${lateMins} នាទី`;
-        }
-    } 
-    // --- ផ្នែកពិនិត្យ Check-out ---
-    else if (type === "checkout") {
-        statusLabel = "🚪 ចេញពីធ្វើការ (Check-Out)";
-        const earlyMins = getDiffMinutes(time, OFFICIAL_OUT, false);
-        if (earlyMins > 0) {
-            extraDetail = `\n🏃 <b>ចេញមុន៖</b> ${earlyMins} នាទី`;
-        }
-    }
-
-    // ១. រៀបចំសារសម្រាប់ Telegram
-    let displayText = `🔔 <b>របាយការណ៍វត្តមាន</b>\n`;
-    displayText += `━━━━━━━━━━━━━━━━━━\n`;
-    displayText += `👤 <b>ឈ្មោះ:</b> ${name}\n`;
-    displayText += `💼 <b>តួនាទី:</b> ${role}\n`;
-    displayText += `📍 <b>ស្ថានភាព:</b> ${statusLabel}\n`;
-    displayText += `📅 <b>ថ្ងៃខែ:</b> ${date}\n`;
-    displayText += `🕒 <b>ម៉ោង:</b> ${time}${extraDetail}\n`;
-    
-    if(reason) {
-        displayText += `━━━━━━━━━━━━━━━━━━\n`;
-        displayText += `⚠️ <b>មូលហេតុ:</b> ${reason}\n`;
-    }
-    displayText += `━━━━━━━━━━━━━━━━━━`;
-
-    // ២. បង្កើត QR Code (លុប tags HTML ចេញសម្រាប់ QR)
-    let qrText = displayText.replace(/<[^>]*>/g, '');
-    document.getElementById("qrcode").innerHTML = "";
-    new QRCode(document.getElementById("qrcode"), {
-        text: qrText,
-        width: 200,
-        height: 200
-    });
-
-    // ៣. ផ្ញើទៅ Telegram
-    sendToTelegram(displayText);
-}
-
-// Function ជំនួយសម្រាប់គណនានាទី
-function getDiffMinutes(currentTime, limitTime, isLateCheck) {
-    const [curH, curM] = currentTime.split(':').map(Number);
-    const [limH, limM] = limitTime.split(':').map(Number);
-    const curTotal = (curH * 60) + curM;
-    const limTotal = (limH * 60) + limM;
-
-    if (isLateCheck) {
-        return curTotal > limTotal ? curTotal - limTotal : 0;
+        const diff = calcDiff(time, IN_LIMIT);
+        if (diff > 0) extraNote = `\n⏰ <b>យឺត៖</b> ${diff} នាទី`;
     } else {
-        return limTotal > curTotal ? limTotal - curTotal : 0;
+        const diff = calcDiff(OUT_LIMIT, time);
+        if (diff > 0) extraNote = `\n🏃 <b>ចេញមុន៖</b> ${diff} នាទី`;
+    }
+
+    // រៀបចំសារ Telegram
+    const msg = `🔔 <b>របាយការណ៍វត្តមាន</b>\n` +
+                `━━━━━━━━━━━━━━━\n` +
+                `👤 <b>ឈ្មោះ៖</b> ${name}\n` +
+                `💼 <b>តួនាទី៖</b> ${role}\n` +
+                `📍 <b>ស្ថានភាព៖</b> ${type === 'checkin' ? '✅ Check-In' : '🚪 Check-Out'}\n` +
+                `🕒 <b>ម៉ោង៖</b> ${time}${extraNote}\n` +
+                `📅 <b>ថ្ងៃទី៖</b> ${date}\n` +
+                (reason ? `💬 <b>មូលហេតុ៖</b> ${reason}\n` : "") +
+                `━━━━━━━━━━━━━━━`;
+
+    // បង្កើត QR
+    document.getElementById("qrcode").innerHTML = "";
+    new QRCode(document.getElementById("qrcode"), { text: msg.replace(/<[^>]*>/g, ''), width: 180, height: 180 });
+
+    // ផ្ញើទៅ Telegram
+    try {
+        const resp = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: CHAT_ID, text: msg, parse_mode: "HTML" })
+        });
+        if (resp.ok) alert("✅ បញ្ជូនទៅ Telegram ជោគជ័យ!");
+        else alert("❌ កំហុស Bot! សូមឆែក Bot របស់អ្នកឡើងវិញ។");
+    } catch (err) {
+        alert("❌ គ្មានអ៊ីនធឺណិត!");
     }
 }
 </script>
 </body>
 </html>
-
